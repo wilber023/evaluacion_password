@@ -1,4 +1,4 @@
-const { isCommonPassword } = require('../utils/commonPasswords');
+const { isCommonPassword, analyzePasswordSimilarity } = require('../utils/commonPasswords');
 
 class PasswordService {
   
@@ -98,6 +98,7 @@ class PasswordService {
   async evaluatePassword(password) {
     try {
       const isCommon = await isCommonPassword(password);
+      const similarityAnalysis = await analyzePasswordSimilarity(password);
       
       let entropy = this.calculateEntropy(password);
       
@@ -107,11 +108,14 @@ class PasswordService {
       
       const strength = this.classifyStrength(entropy, isCommon);
       const estimatedCrackTimeSeconds = this.calculateCrackTime(entropy, isCommon);
+      const suggestions = this.generatePasswordSuggestions(password, similarityAnalysis);
 
       return {
         entropy,
         strength,
         estimatedCrackTimeSeconds,
+        similarityAnalysis,
+        suggestions,
         metadata: {
           length: password.length,
           characterTypes: this.detectCharacterTypes(password),
@@ -124,6 +128,94 @@ class PasswordService {
       console.error('Error en evaluatePassword:', error.message);
       throw new Error('Error al evaluar la contraseña');
     }
+  }
+
+  generatePasswordSuggestions(password, similarityAnalysis) {
+    const suggestions = [];
+    const characterTypes = this.detectCharacterTypes(password);
+    
+    // Sugerencias basadas en el análisis de similitud
+    if (similarityAnalysis.isCommon) {
+      suggestions.push({
+        type: 'critical',
+        message: 'Usar una contraseña completamente diferente',
+        reason: 'Esta contraseña aparece en listas de contraseñas comprometidas'
+      });
+    } else if (similarityAnalysis.hasSimilar) {
+      const mostSimilar = similarityAnalysis.similarPasswords[0];
+      if (mostSimilar.type === 'simple_variation') {
+        suggestions.push({
+          type: 'warning',
+          message: 'Evitar variaciones simples de contraseñas comunes',
+          reason: 'Agregar solo números o cambiar mayúsculas no mejora significativamente la seguridad'
+        });
+      } else {
+        suggestions.push({
+          type: 'info',
+          message: 'Considerar una contraseña menos predecible',
+          reason: `La contraseña actual es similar a "${mostSimilar.password}"`
+        });
+      }
+    }
+    
+    // Sugerencias basadas en caracteres
+    if (!characterTypes.hasLowercase) {
+      suggestions.push({
+        type: 'improvement',
+        message: 'Agregar letras minúsculas',
+        reason: 'Aumenta la complejidad del alfabeto disponible'
+      });
+    }
+    
+    if (!characterTypes.hasUppercase) {
+      suggestions.push({
+        type: 'improvement',
+        message: 'Agregar letras mayúsculas',
+        reason: 'Aumenta la complejidad del alfabeto disponible'
+      });
+    }
+    
+    if (!characterTypes.hasNumbers) {
+      suggestions.push({
+        type: 'improvement',
+        message: 'Agregar números',
+        reason: 'Aumenta la complejidad del alfabeto disponible'
+      });
+    }
+    
+    if (!characterTypes.hasSymbols) {
+      suggestions.push({
+        type: 'improvement',
+        message: 'Agregar símbolos especiales (!@#$%^&*)',
+        reason: 'Maximiza la complejidad del alfabeto disponible'
+      });
+    }
+    
+    // Sugerencias basadas en longitud
+    if (password.length < 8) {
+      suggestions.push({
+        type: 'critical',
+        message: 'Usar al menos 8 caracteres',
+        reason: 'Contraseñas cortas son vulnerables a ataques de fuerza bruta'
+      });
+    } else if (password.length < 12) {
+      suggestions.push({
+        type: 'improvement',
+        message: 'Considerar usar al menos 12 caracteres',
+        reason: 'Mayor longitud proporciona mejor protección'
+      });
+    }
+    
+    // Sugerencias generales
+    if (suggestions.length === 0) {
+      suggestions.push({
+        type: 'success',
+        message: 'Contraseña cumple con criterios básicos de seguridad',
+        reason: 'Continuar monitoreando y actualizar periódicamente'
+      });
+    }
+    
+    return suggestions;
   }
 
   getEvaluationCriteria() {
