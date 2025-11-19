@@ -1,3 +1,4 @@
+// src/app.js
 const express = require('express');
 const passwordRoutes = require('./routes/password');
 
@@ -27,8 +28,8 @@ const createApp = () => {
   app.get('/', (req, res) => {
     res.status(200).json({
       name: 'Password Evaluator API',
-      version: '1.0.0',
-      description: 'API para evaluar la fuerza de contraseñas mediante cálculo de entropía',
+      version: '2.0.0',
+      description: 'API para evaluar la fuerza de contraseñas con MySQL',
       endpoints: {
         evaluate: 'POST /api/v1/password/evaluate',
         health: 'GET /health'
@@ -54,5 +55,5 @@ const createApp = () => {
 
   return app;
 };
-
+ 
 module.exports = createApp;

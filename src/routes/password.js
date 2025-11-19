@@ -1,3 +1,4 @@
+// src/routes/password.js
 const express = require('express');
 const passwordService = require('../services/passwordService');
 const { analyzePasswordSimilarity, findSimilarPasswords } = require('../utils/commonPasswords');
@@ -35,9 +36,13 @@ router.post('/evaluate', async (req, res) => {
     }
 
     const password = req.body.password;
+    const startTime = Date.now();
     console.log(`Evaluando contraseña de ${password.length} caracteres`);
 
     const evaluation = await passwordService.evaluatePassword(password);
+    const endTime = Date.now();
+
+    console.log(`✅ Evaluación completada en ${endTime - startTime}ms`);
 
     res.status(200).json({
       password: password,
@@ -57,12 +62,14 @@ router.post('/evaluate', async (req, res) => {
         length: evaluation.metadata.length,
         character_types: evaluation.metadata.characterTypes,
         alphabet_size: evaluation.metadata.alphabetSize,
-        is_common_password: evaluation.metadata.isCommonPassword
+        is_common_password: evaluation.metadata.isCommonPassword,
+        evaluation_time_ms: endTime - startTime
       }
     });
 
   } catch (error) {
     console.error('Error evaluando contraseña:', error.message);
+    console.error(error.stack);
     
     res.status(500).json({
       error: 'Error interno',
@@ -88,8 +95,8 @@ router.post('/similarity', async (req, res) => {
     }
 
     const password = req.body.password;
-    const maxResults = req.body.max_results || 5;
-    const minSimilarity = req.body.min_similarity || 0.7;
+    const maxResults = Math.min(req.body.max_results || 5, 10); // Máximo 10
+    const minSimilarity = Math.max(req.body.min_similarity || 0.7, 0.5); // Mínimo 0.5
 
     console.log(`Analizando similitud para contraseña de ${password.length} caracteres`);
 
@@ -133,21 +140,22 @@ router.get('/info', (req, res) => {
         symbols: 32
       },
       strength_classification: {
-        'Muy Débil (común)': 'Contraseña encontrada en lista de contraseñas comunes',
-        'Débil o Aceptable': '0 - 60 bits de entropía',
+        'Muy Débil': '< 30 bits o contraseña común',
+        'Débil': '30 - 45 bits de entropía',
+        'Aceptable': '45 - 60 bits de entropía',
         'Fuerte': '60 - 80 bits de entropía',
         'Muy Fuerte': '80+ bits de entropía'
       },
       crack_time_calculation: {
         attack_rate: '10^11 intentos por segundo',
-        formula: 'tiempo = 2^entropía / tasa_de_ataque'
+        formula: 'tiempo = 2^entropía / (2 × tasa_de_ataque)'
       },
       similarity_analysis: {
         description: 'Análisis de similitud con contraseñas comunes',
         types: {
           'identical': 'Contraseña idéntica en la base de datos',
           'simple_variation': 'Variación simple (mayúsculas, números agregados)',
-          'similar': 'Contraseña similar basada en distancia de edición'
+          'similar': 'Contraseña similar basada en distancia de edición (Levenshtein)'
         },
         similarity_threshold: 'Mínimo 70% de similitud para ser considerada similar',
         security_levels: {
@@ -162,6 +170,10 @@ router.get('/info', (req, res) => {
       '/password/evaluate': 'POST - Evaluación completa de contraseña',
       '/password/similarity': 'POST - Análisis específico de similitud',
       '/password/info': 'GET - Información sobre criterios de evaluación'
+    },
+    database: {
+      total_passwords: 961883,
+      performance: '1-10ms por evaluación'
     }
   });
 });

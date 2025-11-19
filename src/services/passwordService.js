@@ -1,234 +1,219 @@
-const { isCommonPassword, analyzePasswordSimilarity } = require('../utils/commonPasswords');
+// src/services/passwordService.js
+const { analyzePasswordSimilarity } = require('../utils/commonPasswords');
 
 class PasswordService {
-  
-  constructor() {
-    this.ATTACK_RATE = Math.pow(10, 11);
-    
-    this.ALPHABET_SIZES = {
-      lowercase: 26,
-      uppercase: 26,
-      numbers: 10,
-      symbols: 32
-    };
-
-    this.STRENGTH_LEVELS = {
-      VERY_WEAK_COMMON: 'Muy Débil (común)',
-      WEAK_ACCEPTABLE: 'Débil o Aceptable',
-      STRONG: 'Fuerte',
-      VERY_STRONG: 'Muy Fuerte'
-    };
-  }
-
-  detectCharacterTypes(password) {
-    const types = {
-      hasLowercase: /[a-z]/.test(password),
-      hasUppercase: /[A-Z]/.test(password),
-      hasNumbers: /[0-9]/.test(password),
-      hasSymbols: /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(password)
-    };
-
-    return types;
-  }
-
-  calculateAlphabetSize(characterTypes) {
-    let alphabetSize = 0;
-
-    if (characterTypes.hasLowercase) {
-      alphabetSize += this.ALPHABET_SIZES.lowercase;
-    }
-    
-    if (characterTypes.hasUppercase) {
-      alphabetSize += this.ALPHABET_SIZES.uppercase;
-    }
-    
-    if (characterTypes.hasNumbers) {
-      alphabetSize += this.ALPHABET_SIZES.numbers;
-    }
-    
-    if (characterTypes.hasSymbols) {
-      alphabetSize += this.ALPHABET_SIZES.symbols;
+    constructor() {
+        this.ATTACK_RATE = Math.pow(10, 11);
+        this.ALPHABET_SIZES = {
+            lowercase: 26,
+            uppercase: 26,
+            numbers: 10,
+            symbols: 32
+        };
+        
+        // CRITERIOS MÁS ESTRICTOS
+        this.STRENGTH_LEVELS = {
+            VERY_WEAK: 'Muy Débil',
+            WEAK: 'Débil',
+            ACCEPTABLE: 'Aceptable',
+            STRONG: 'Fuerte',
+            VERY_STRONG: 'Muy Fuerte'
+        };
+        
+        // LÍMITES MÁS ESTRICTOS
+        this.ENTROPY_THRESHOLDS = {
+            VERY_WEAK: 30,    // < 30 bits = Muy Débil
+            WEAK: 45,         // 30-45 bits = Débil  
+            ACCEPTABLE: 60,   // 45-60 bits = Aceptable
+            STRONG: 80,       // 60-80 bits = Fuerte
+            VERY_STRONG: 80   // > 80 bits = Muy Fuerte
+        };
     }
 
-    return alphabetSize || this.ALPHABET_SIZES.lowercase;
-  }
-
-  calculateEntropy(password) {
-    const length = password.length;
-    const characterTypes = this.detectCharacterTypes(password);
-    const alphabetSize = this.calculateAlphabetSize(characterTypes);
-    
-    const entropy = length * Math.log2(alphabetSize);
-    
-    return Math.round(entropy * 100) / 100;
-  }
-
-  classifyStrength(entropy, isCommon) {
-    if (isCommon) {
-      return this.STRENGTH_LEVELS.VERY_WEAK_COMMON;
+    detectCharacterTypes(password) {
+        return {
+            hasLowercase: /[a-z]/.test(password),
+            hasUppercase: /[A-Z]/.test(password),
+            hasNumbers: /[0-9]/.test(password),
+            hasSymbols: /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(password)
+        };
     }
 
-    if (entropy >= 80) {
-      return this.STRENGTH_LEVELS.VERY_STRONG;
-    } else if (entropy >= 60) {
-      return this.STRENGTH_LEVELS.STRONG;
-    } else {
-      return this.STRENGTH_LEVELS.WEAK_ACCEPTABLE;
-    }
-  }
-
-  calculateCrackTime(entropy, isCommon) {
-    if (isCommon) {
-      return 0.01;
+    calculateAlphabetSize(characterTypes) {
+        let alphabetSize = 0;
+        if (characterTypes.hasLowercase) alphabetSize += this.ALPHABET_SIZES.lowercase;
+        if (characterTypes.hasUppercase) alphabetSize += this.ALPHABET_SIZES.uppercase;
+        if (characterTypes.hasNumbers) alphabetSize += this.ALPHABET_SIZES.numbers;
+        if (characterTypes.hasSymbols) alphabetSize += this.ALPHABET_SIZES.symbols;
+        return alphabetSize || this.ALPHABET_SIZES.lowercase;
     }
 
-    const totalCombinations = Math.pow(2, entropy);
-    const crackTimeSeconds = totalCombinations / (2 * this.ATTACK_RATE);
-    
-    return Math.round(crackTimeSeconds * 100) / 100;
-  }
-
-  applyCommonPasswordPenalty(entropy, isCommon) {
-    if (isCommon) {
-      return Math.round(entropy * 0.8 * 100) / 100;
+    calculateEntropy(password) {
+        const length = password.length;
+        const characterTypes = this.detectCharacterTypes(password);
+        const alphabetSize = this.calculateAlphabetSize(characterTypes);
+        const entropy = length * Math.log2(alphabetSize);
+        return Math.round(entropy * 100) / 100;
     }
-    return entropy;
-  }
 
-  async evaluatePassword(password) {
-    try {
-      const isCommon = await isCommonPassword(password);
-      const similarityAnalysis = await analyzePasswordSimilarity(password);
-      
-      let entropy = this.calculateEntropy(password);
-      
-      if (isCommon) {
-        entropy = this.applyCommonPasswordPenalty(entropy, isCommon);
-      }
-      
-      const strength = this.classifyStrength(entropy, isCommon);
-      const estimatedCrackTimeSeconds = this.calculateCrackTime(entropy, isCommon);
-      const suggestions = this.generatePasswordSuggestions(password, similarityAnalysis);
+    classifyStrength(entropy, isCommon, password) {
+        // Si es común, automáticamente Muy Débil
+        if (isCommon) return this.STRENGTH_LEVELS.VERY_WEAK;
+        
+        // Penalización por longitud muy corta
+        if (password.length < 6) return this.STRENGTH_LEVELS.VERY_WEAK;
+        
+        // Penalización por solo un tipo de carácter
+        const charTypes = this.detectCharacterTypes(password);
+        const typeCount = Object.values(charTypes).filter(Boolean).length;
+        if (typeCount === 1 && password.length < 12) return this.STRENGTH_LEVELS.VERY_WEAK;
+        
+        // Clasificación por entropía
+        if (entropy < this.ENTROPY_THRESHOLDS.VERY_WEAK) return this.STRENGTH_LEVELS.VERY_WEAK;
+        if (entropy < this.ENTROPY_THRESHOLDS.WEAK) return this.STRENGTH_LEVELS.WEAK;
+        if (entropy < this.ENTROPY_THRESHOLDS.ACCEPTABLE) return this.STRENGTH_LEVELS.ACCEPTABLE;
+        if (entropy < this.ENTROPY_THRESHOLDS.STRONG) return this.STRENGTH_LEVELS.STRONG;
+        return this.STRENGTH_LEVELS.VERY_STRONG;
+    }
 
-      return {
-        entropy,
-        strength,
-        estimatedCrackTimeSeconds,
-        similarityAnalysis,
-        suggestions,
-        metadata: {
-          length: password.length,
-          characterTypes: this.detectCharacterTypes(password),
-          alphabetSize: this.calculateAlphabetSize(this.detectCharacterTypes(password)),
-          isCommonPassword: isCommon
+    calculateCrackTime(entropy, isCommon) {
+        if (isCommon) return 0.001; // Más realista para contraseñas comunes
+        
+        const totalCombinations = Math.pow(2, entropy);
+        const crackTimeSeconds = totalCombinations / (2 * this.ATTACK_RATE);
+        
+        // Asegurar que contraseñas muy débiles tengan tiempo de crackeo bajo
+        return Math.max(0.001, Math.round(crackTimeSeconds * 100) / 100);
+    }
+
+    applyCommonPasswordPenalty(entropy, isCommon) {
+        if (isCommon) {
+            return Math.max(10, Math.round(entropy * 0.5 * 100) / 100); // Penalización más severa
         }
-      };
+        return entropy;
+    }
 
-    } catch (error) {
-      console.error('Error en evaluatePassword:', error.message);
-      throw new Error('Error al evaluar la contraseña');
-    }
-  }
+    async evaluatePassword(password) {
+        try {
+            const similarityAnalysis = await analyzePasswordSimilarity(password);
+            const isCommon = similarityAnalysis.isCommon;
+            
+            let entropy = this.calculateEntropy(password);
+            entropy = this.applyCommonPasswordPenalty(entropy, isCommon);
+            
+            const strength = this.classifyStrength(entropy, isCommon, password);
+            const estimatedCrackTimeSeconds = this.calculateCrackTime(entropy, isCommon);
+            const suggestions = this.generatePasswordSuggestions(password, similarityAnalysis, strength);
 
-  generatePasswordSuggestions(password, similarityAnalysis) {
-    const suggestions = [];
-    const characterTypes = this.detectCharacterTypes(password);
-    
-    // Sugerencias basadas en el análisis de similitud
-    if (similarityAnalysis.isCommon) {
-      suggestions.push({
-        type: 'critical',
-        message: 'Usar una contraseña completamente diferente',
-        reason: 'Esta contraseña aparece en listas de contraseñas comprometidas'
-      });
-    } else if (similarityAnalysis.hasSimilar) {
-      const mostSimilar = similarityAnalysis.similarPasswords[0];
-      if (mostSimilar.type === 'simple_variation') {
-        suggestions.push({
-          type: 'warning',
-          message: 'Evitar variaciones simples de contraseñas comunes',
-          reason: 'Agregar solo números o cambiar mayúsculas no mejora significativamente la seguridad'
-        });
-      } else {
-        suggestions.push({
-          type: 'info',
-          message: 'Considerar una contraseña menos predecible',
-          reason: `La contraseña actual es similar a "${mostSimilar.password}"`
-        });
-      }
-    }
-    
-    // Sugerencias basadas en caracteres
-    if (!characterTypes.hasLowercase) {
-      suggestions.push({
-        type: 'improvement',
-        message: 'Agregar letras minúsculas',
-        reason: 'Aumenta la complejidad del alfabeto disponible'
-      });
-    }
-    
-    if (!characterTypes.hasUppercase) {
-      suggestions.push({
-        type: 'improvement',
-        message: 'Agregar letras mayúsculas',
-        reason: 'Aumenta la complejidad del alfabeto disponible'
-      });
-    }
-    
-    if (!characterTypes.hasNumbers) {
-      suggestions.push({
-        type: 'improvement',
-        message: 'Agregar números',
-        reason: 'Aumenta la complejidad del alfabeto disponible'
-      });
-    }
-    
-    if (!characterTypes.hasSymbols) {
-      suggestions.push({
-        type: 'improvement',
-        message: 'Agregar símbolos especiales (!@#$%^&*)',
-        reason: 'Maximiza la complejidad del alfabeto disponible'
-      });
-    }
-    
-    // Sugerencias basadas en longitud
-    if (password.length < 8) {
-      suggestions.push({
-        type: 'critical',
-        message: 'Usar al menos 8 caracteres',
-        reason: 'Contraseñas cortas son vulnerables a ataques de fuerza bruta'
-      });
-    } else if (password.length < 12) {
-      suggestions.push({
-        type: 'improvement',
-        message: 'Considerar usar al menos 12 caracteres',
-        reason: 'Mayor longitud proporciona mejor protección'
-      });
-    }
-    
-    // Sugerencias generales
-    if (suggestions.length === 0) {
-      suggestions.push({
-        type: 'success',
-        message: 'Contraseña cumple con criterios básicos de seguridad',
-        reason: 'Continuar monitoreando y actualizar periódicamente'
-      });
-    }
-    
-    return suggestions;
-  }
+            return {
+                entropy,
+                strength,
+                estimatedCrackTimeSeconds,
+                similarityAnalysis,
+                suggestions,
+                metadata: {
+                    length: password.length,
+                    characterTypes: this.detectCharacterTypes(password),
+                    alphabetSize: this.calculateAlphabetSize(this.detectCharacterTypes(password)),
+                    isCommonPassword: isCommon,
+                    characterTypeCount: Object.values(this.detectCharacterTypes(password)).filter(Boolean).length
+                }
+            };
 
-  getEvaluationCriteria() {
-    return {
-      alphabetSizes: this.ALPHABET_SIZES,
-      strengthLevels: this.STRENGTH_LEVELS,
-      attackRate: this.ATTACK_RATE,
-      entropyFormula: 'E = L × log2(N), donde L=longitud y N=tamaño del alfabeto',
-      crackTimeFormula: 'tiempo = 2^entropía / (2 × tasa_de_ataque)'
-    };
-  }
+        } catch (error) {
+            console.error('Error en evaluatePassword:', error.message);
+            throw new Error('Error al evaluar la contraseña');
+        }
+    }
+
+    generatePasswordSuggestions(password, similarityAnalysis, strength) {
+        const suggestions = [];
+        const characterTypes = this.detectCharacterTypes(password);
+        const typeCount = Object.values(characterTypes).filter(Boolean).length;
+
+        // Sugerencias CRÍTICAS para contraseñas muy débiles
+        if (strength === this.STRENGTH_LEVELS.VERY_WEAK) {
+            if (password.length < 8) {
+                suggestions.push({
+                    type: 'critical',
+                    message: 'CONTRASEÑA MUY CORTA - Usar al menos 8 caracteres',
+                    reason: 'Contraseñas menores a 8 caracteres son extremadamente vulnerables'
+                });
+            }
+            
+            if (typeCount === 1) {
+                suggestions.push({
+                    type: 'critical', 
+                    message: 'VARIEDAD DE CARACTERES INSUFICIENTE',
+                    reason: 'Usar combinación de mayúsculas, minúsculas, números y símbolos'
+                });
+            }
+        }
+
+        if (similarityAnalysis.isCommon) {
+            suggestions.push({
+                type: 'critical',
+                message: 'CONTRASEÑA COMPROMETIDA - Cambiar inmediatamente',
+                reason: 'Esta contraseña aparece en listas de contraseñas filtradas globalmente'
+            });
+        }
+
+        // Sugerencias de MEJORA específicas
+        if (!characterTypes.hasUppercase) {
+            suggestions.push({
+                type: strength === this.STRENGTH_LEVELS.VERY_WEAK ? 'critical' : 'improvement',
+                message: 'Agregar letras mayúsculas',
+                reason: 'Aumenta significativamente la complejidad'
+            });
+        }
+        
+        if (!characterTypes.hasNumbers) {
+            suggestions.push({
+                type: strength === this.STRENGTH_LEVELS.VERY_WEAK ? 'critical' : 'improvement',
+                message: 'Agregar números',
+                reason: 'Expande el conjunto de caracteres disponibles'
+            });
+        }
+        
+        if (!characterTypes.hasSymbols) {
+            suggestions.push({
+                type: 'improvement',
+                message: 'Agregar símbolos especiales (!@#$%^&*)',
+                reason: 'Maximiza la complejidad del alfabeto'
+            });
+        }
+        
+        if (password.length < 12 && strength !== this.STRENGTH_LEVELS.VERY_STRONG) {
+            suggestions.push({
+                type: password.length < 8 ? 'critical' : 'improvement',
+                message: `Longitud actual: ${password.length} caracteres - Recomendado: 12+`,
+                reason: 'Cada carácter adicional aumenta exponencialmente la seguridad'
+            });
+        }
+
+        // Mensaje de éxito solo para contraseñas fuertes
+        if (strength === this.STRENGTH_LEVELS.VERY_STRONG) {
+            suggestions.push({
+                type: 'success',
+                message: '¡Excelente contraseña!',
+                reason: 'Cumple con los más altos estándares de seguridad'
+            });
+        }
+
+        return suggestions;
+    }
+
+    getEvaluationCriteria() {
+        return {
+            strengthLevels: this.STRENGTH_LEVELS,
+            entropyThresholds: this.ENTROPY_THRESHOLDS,
+            minimumRequirements: {
+                length: '8 caracteres mínimo, 12+ recomendado',
+                characterTypes: 'Mínimo 2 tipos diferentes (ej: letras + números)',
+                entropy: 'Mínimo 45 bits para ser aceptable'
+            }
+        };
+    }
 }
 
-const passwordService = new PasswordService();
-
-module.exports = passwordService;
+module.exports = new PasswordService();
