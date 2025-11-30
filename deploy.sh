@@ -150,10 +150,16 @@ echo ""
 print_step "PASO 3: Instalando dependencias de Node.js..."
 echo ""
 
+# Intentar npm ci primero, si falla usar npm install
 if [ -f package-lock.json ]; then
-    npm ci --production
+    print_info "Intentando instalación limpia con npm ci..."
+    if ! npm ci --omit=dev 2>/dev/null; then
+        print_warning "npm ci falló, regenerando package-lock.json..."
+        rm -f package-lock.json
+        npm install --omit=dev
+    fi
 else
-    npm install --production
+    npm install --omit=dev
 fi
 print_success "Dependencias instaladas"
 echo ""
