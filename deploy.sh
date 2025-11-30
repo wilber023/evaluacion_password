@@ -172,19 +172,28 @@ echo ""
 
 print_info "Creando usuario y otorgando permisos..."
 
-# Intentar crear usuario automáticamente
-if mysql -h localhost -u root -p <<EOFMYSQL 2>/dev/null
-CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
-GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';
-FLUSH PRIVILEGES;
-EOFMYSQL
-then
-    print_success "Usuario MySQL configurado"
-else
+# Intentar múltiples métodos para crear el usuario MySQL
+USER_CREATED=false
+
+# Método 1: Intentar con sudo mysql (auth_socket en Ubuntu)
+if sudo mysql -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}'; GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null; then
+    print_success "Usuario MySQL configurado (método: sudo mysql)"
+    USER_CREATED=true
+# Método 2: Intentar sin contraseña root
+elif mysql -u root -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}'; GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null; then
+    print_success "Usuario MySQL configurado (método: root sin password)"
+    USER_CREATED=true
+# Método 3: Intentar con contraseña vacía
+elif mysql -u root -p'' -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}'; GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null; then
+    print_success "Usuario MySQL configurado (método: root password vacío)"
+    USER_CREATED=true
+fi
+
+if [ "$USER_CREATED" = false ]; then
     print_warning "No se pudo crear usuario automáticamente."
-    print_info "Por favor crea el usuario manualmente con estos comandos:"
+    print_info "Ejecuta estos comandos manualmente:"
     echo ""
-    echo "  mysql -u root -p"
+    echo "  sudo mysql"
     echo "  CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
     echo "  GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';"
     echo "  FLUSH PRIVILEGES;"
