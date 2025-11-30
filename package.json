@@ -7,7 +7,18 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "migrate": "node src/scripts/migrate.js",
-    "test": "node src/scripts/test-performance.js"
+    "migrate:up": "node src/scripts/migration-manager.js migrate",
+    "migrate:status": "node src/scripts/migration-manager.js status",
+    "migrate:reset": "node src/scripts/migration-manager.js reset",
+    "migrate:load-data": "node src/scripts/migrate.js",
+    "test": "node src/scripts/test-performance.js",
+    "deploy": "bash deploy.sh",
+    "verify": "bash verify-deployment.sh",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop password-evaluator-api",
+    "pm2:restart": "pm2 restart password-evaluator-api",
+    "pm2:logs": "pm2 logs password-evaluator-api",
+    "pm2:monit": "pm2 monit"
   },
   "keywords": [
     "password",

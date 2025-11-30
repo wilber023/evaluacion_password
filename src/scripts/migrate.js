@@ -2,20 +2,21 @@ const mysql = require('mysql2/promise');
 const fs = require('fs');
 const readline = require('readline');
 const path = require('path');
+require('dotenv').config();
 
 class CSVToMySQLMigrator {
     constructor() {
-        this.batchSize = 1000; // Insertar en lotes de 1000
+        this.batchSize = 1000;
         this.totalProcessed = 0;
         this.totalInserted = 0;
     }
 
     async connect() {
         this.connection = await mysql.createConnection({
-            host: 'localhost',
-            user: 'evaluate',
-            password: 'evaluate123',
-            database: 'evaluate',
+            host: process.env.DB_HOST || 'localhost',
+            user: process.env.DB_USER || 'evaluate',
+            password: process.env.DB_PASSWORD || 'evaluate123',
+            database: process.env.DB_NAME || 'evaluate',
             charset: 'utf8mb4',
             multipleStatements: false
         });
