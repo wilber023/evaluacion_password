@@ -173,21 +173,26 @@ echo ""
 print_info "Creando usuario y otorgando permisos..."
 
 # Intentar crear usuario automáticamente
-mysql -h localhost -u root -p <<EOF 2>/dev/null || {
-    print_warning "No se pudo crear usuario automáticamente."
-    print_info "Por favor crea el usuario manualmente con estos comandos:"
-    echo "  CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
-    echo "  GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';"
-    echo "  FLUSH PRIVILEGES;"
-    print_info "Presiona Enter cuando hayas creado el usuario..."
-    read -r
-}
+if mysql -h localhost -u root -p <<EOFMYSQL 2>/dev/null
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';
 FLUSH PRIVILEGES;
-EOF
-
-print_success "Usuario MySQL configurado"
+EOFMYSQL
+then
+    print_success "Usuario MySQL configurado"
+else
+    print_warning "No se pudo crear usuario automáticamente."
+    print_info "Por favor crea el usuario manualmente con estos comandos:"
+    echo ""
+    echo "  mysql -u root -p"
+    echo "  CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
+    echo "  GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';"
+    echo "  FLUSH PRIVILEGES;"
+    echo "  EXIT;"
+    echo ""
+    print_info "Presiona Enter cuando hayas creado el usuario..."
+    read -r
+fi
 echo ""
 
 # ============================================
